@@ -608,6 +608,10 @@ export class DaemonClient {
       await this.sendMessageToDaemon({ type: FORCE_SHUTDOWN });
       await waitForDaemonToExitAndCleanupProcessJson();
     } catch (err) {
+      if (err.code === 'ENOENT') {
+        // The daemon wasn't alive, so we don't need to do anything else.
+        return;
+      }
       output.error({
         title:
           err?.message ||
