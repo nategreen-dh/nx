@@ -11,7 +11,8 @@ type PropertyInfoTooltipType =
   | 'options'
   | 'configurations'
   | 'release'
-  | 'parallelism';
+  | 'parallelism'
+  | 'syncGenerators';
 
 type PropertyInfoTooltipTypeOptions = {
   docsUrl?: string;
@@ -87,6 +88,11 @@ const PROPERTY_INFO_TOOLTIP_TYPE_OPTIONS: Record<
     description:
       'By default, tasks are run in parallel with other tasks. Setting `"parallelism": false` ensures that the target will not run in parallel with other tasks on the same machine.',
     docsUrl: 'https://nx.dev/reference/project-configuration#parallelism',
+  },
+  syncGenerators: {
+    heading: 'Sync Generators',
+    description:
+      'This is a list of generators to run before the task runs to ensure the workspace is up to date.',
   },
 };
 

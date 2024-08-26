@@ -374,6 +374,39 @@ export default function TargetConfigurationDetails({
               </div>
             </div>
           ) : null}
+
+          {targetConfiguration.syncGenerators && (
+            <div className="group">
+              <h4 className="mb-4">
+                <Tooltip
+                  openAction="hover"
+                  content={
+                    (<PropertyInfoTooltip type="syncGenerators" />) as any
+                  }
+                >
+                  <span className="font-medium">
+                    <TooltipTriggerText>Sync Generators</TooltipTriggerText>
+                  </span>
+                </Tooltip>
+              </h4>
+              <ul className="mb-4 list-disc pl-5">
+                {targetConfiguration.syncGenerators.map((generator, idx) => (
+                  <li
+                    className="group/line overflow-hidden whitespace-nowrap"
+                    key={`syncGenerators-${idx}`}
+                  >
+                    <TargetConfigurationProperty data={generator}>
+                      <TargetSourceInfo
+                        className="min-w-0 flex-1 pl-4 opacity-0 transition-opacity duration-150 ease-in-out group-hover/line:opacity-100"
+                        propertyKey={`targets.${targetName}.syncGenerators`}
+                        sourceMap={sourceMap}
+                      />
+                    </TargetConfigurationProperty>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

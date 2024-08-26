@@ -83,6 +83,7 @@ export const Primary = {
               ],
             },
             configurations: {},
+            syncGenerators: ['@nx/js:typescript-sync'],
           },
           build: {
             dependsOn: ['build-base', 'build-native'],
