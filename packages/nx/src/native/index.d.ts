@@ -95,7 +95,7 @@ export interface CachedResult {
   outputsPath: string
 }
 
-export declare export function connectToNxDb(cacheDir: string, nxVersion: string): ExternalObject<Connection>
+export declare export function connectToNxDb(cacheDir: string, nxVersion: string, dbName?: string | undefined | null): ExternalObject<Connection>
 
 export declare export function copy(src: string, dest: string): void
 

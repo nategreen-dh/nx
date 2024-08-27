@@ -8,7 +8,11 @@ import {
   RemoteCacheV2,
 } from './default-tasks-runner';
 import { spawn } from 'child_process';
-import { cacheDir } from '../utils/cache-directory';
+import {
+  cacheDir,
+  defaultCacheDir,
+  workspaceDataDirectory,
+} from '../utils/cache-directory';
 import { Task } from '../config/task-graph';
 import { machineId } from 'node-machine-id';
 import { NxCache } from '../native';
@@ -28,6 +32,8 @@ export type TaskWithCachedResult = { task: Task; cachedResult: CachedResult };
 
 export class DbCache {
   private cache = new NxCache(workspaceRoot, cacheDir, getDbConnection());
+  private fallbackDbCache: NxCache | null = null;
+
   private remoteCache: RemoteCacheV2 | null;
   private remoteCachePromise: Promise<RemoteCacheV2>;
 
@@ -35,7 +41,24 @@ export class DbCache {
     this.remoteCache = await this.getRemoteCache();
   }
 
-  constructor(private readonly options: { nxCloudRemoteCache: RemoteCache }) {}
+  constructor(private readonly options: { nxCloudRemoteCache: RemoteCache }) {
+    // User has customized the cache directory - this could be because they
+    // are using a shared cache in the custom directory. The db cache is not
+    // stored in the cache directory, and is keyed by machine ID so they would
+    // hit issues. If we detect this, we can create a fallback db cache in the
+    // custom directory, and check if the entries are there when the main db
+    // cache misses.
+    if (cacheDir !== defaultCacheDir) {
+      this.fallbackDbCache = new NxCache(
+        workspaceRoot,
+        process.env.NX_SHARED_CACHE_DIRECTORY,
+        getDbConnection({
+          dbName: 'shared',
+          directory: cacheDir,
+        })
+      );
+    }
+  }
 
   async get(task: Task): Promise<CachedResult | null> {
     const res = this.cache.get(task.hash);
@@ -45,6 +68,30 @@ export class DbCache {
         ...res,
         remote: false,
       };
+    } else if (this.fallbackDbCache) {
+      const sharedRes = this.fallbackDbCache.get(task.hash);
+      if (sharedRes) {
+        if (
+          process.env.NX_REJECT_UNKNOWN_LOCAL_CACHE != '0' &&
+          process.env.NX_REJECT_UNKNOWN_LOCAL_CACHE != 'false'
+        ) {
+          const error = [
+            `Invalid Cache Directory for Task "${task.id}"`,
+            `The local cache artifact in "${cacheDir}" was found in ${cacheDir}.`,
+            `When using the database cache, cache artifacts are stored in a database within ${workspaceDataDirectory}.`,
+            ``,
+            `If you believe this is a mistake, running \`nx reset\` will clear the cache and allow it to be repopulated.`,
+            `Alternatively, setting NX_REJECT_UNKNOWN_LOCAL_CACHE to false will bypass this check.`,
+            ``,
+          ].join('\n');
+          throw new Error(error);
+        }
+
+        return {
+          ...sharedRes,
+          remote: false,
+        };
+      }
     }
     await this.setup();
     if (this.remoteCache) {
@@ -78,6 +125,10 @@ export class DbCache {
   ) {
     return tryAndRetry(async () => {
       this.cache.put(task.hash, terminalOutput, outputs, code);
+
+      if (this.fallbackDbCache) {
+        this.fallbackDbCache.put(task.hash, terminalOutput, outputs, code);
+      }
 
       await this.setup();
       if (this.remoteCache) {
