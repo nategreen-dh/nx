@@ -92,7 +92,7 @@ export type Options = {
 export async function handleErrors(
   isVerbose: boolean,
   fn: Function
-): Promise<number> {
+): Promise<NodeJS.Process['exitCode']> {
   try {
     const result = await fn();
     if (typeof result === 'number') {

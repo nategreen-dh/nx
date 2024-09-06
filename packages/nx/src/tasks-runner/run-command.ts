@@ -4,7 +4,6 @@ import { join } from 'path';
 import {
   NxJsonConfiguration,
   readNxJson,
-  TargetDefaults,
   TargetDependencies,
 } from '../config/nx-json';
 import { ProjectGraph, ProjectGraphProjectNode } from '../config/project-graph';
@@ -47,6 +46,7 @@ import { TasksRunner, TaskStatus } from './tasks-runner';
 import { shouldStreamOutput } from './utils';
 import chalk = require('chalk');
 import { IS_WASM } from '../native';
+import { Observable } from 'rxjs';
 
 async function getTerminalOutputLifeCycle(
   initiatingProject: string,
@@ -169,47 +169,74 @@ export async function runCommand(
   const status = await handleErrors(
     process.env.NX_VERBOSE_LOGGING === 'true',
     async () => {
-      const projectNames = projectsToRun.map((t) => t.name);
-
-      const { projectGraph, taskGraph } =
-        await ensureWorkspaceIsInSyncAndGetGraphs(
-          currentProjectGraph,
-          nxJson,
-          projectNames,
-          nxArgs,
-          overrides,
-          extraTargetDependencies,
-          extraOptions
-        );
-      const tasks = Object.values(taskGraph.tasks);
-
-      const { lifeCycle, renderIsDone } = await getTerminalOutputLifeCycle(
-        initiatingProject,
-        projectNames,
-        tasks,
+      const tasksStatus = await runCommandForTasks(
+        projectsToRun,
+        currentProjectGraph,
+        { nxJson },
         nxArgs,
-        nxJson,
-        overrides
+        overrides,
+        initiatingProject,
+        extraTargetDependencies,
+        extraOptions
       );
 
-      const status = await invokeTasksRunner({
-        tasks,
-        projectGraph,
-        taskGraph,
-        lifeCycle,
-        nxJson,
-        nxArgs,
-        loadDotEnvFiles: extraOptions.loadDotEnvFiles,
-        initiatingProject,
-      });
-
-      await renderIsDone;
-
-      return status;
+      return Object.values(tasksStatus).some(
+        (s) => s === 'failure' || s === 'skipped'
+      )
+        ? 1
+        : 0;
     }
   );
 
   return status;
+}
+
+export async function runCommandForTasks(
+  projectsToRun: ProjectGraphProjectNode[],
+  currentProjectGraph: ProjectGraph,
+  { nxJson }: { nxJson: NxJsonConfiguration },
+  nxArgs: NxArgs,
+  overrides: any,
+  initiatingProject: string | null,
+  extraTargetDependencies: Record<string, (TargetDependencyConfig | string)[]>,
+  extraOptions: { excludeTaskDependencies: boolean; loadDotEnvFiles: boolean }
+): Promise<{ [id: string]: TaskStatus }> {
+  const projectNames = projectsToRun.map((t) => t.name);
+
+  const { projectGraph, taskGraph } = await ensureWorkspaceIsInSyncAndGetGraphs(
+    currentProjectGraph,
+    nxJson,
+    projectNames,
+    nxArgs,
+    overrides,
+    extraTargetDependencies,
+    extraOptions
+  );
+  const tasks = Object.values(taskGraph.tasks);
+
+  const { lifeCycle, renderIsDone } = await getTerminalOutputLifeCycle(
+    initiatingProject,
+    projectNames,
+    tasks,
+    nxArgs,
+    nxJson,
+    overrides
+  );
+
+  const tasksStatus = await invokeTasksRunner({
+    tasks,
+    projectGraph,
+    taskGraph,
+    lifeCycle,
+    nxJson,
+    nxArgs,
+    loadDotEnvFiles: extraOptions.loadDotEnvFiles,
+    initiatingProject,
+  });
+
+  await renderIsDone;
+
+  return tasksStatus;
 }
 
 async function ensureWorkspaceIsInSyncAndGetGraphs(
@@ -409,7 +436,7 @@ export async function invokeTasksRunner({
   nxArgs: NxArgs;
   loadDotEnvFiles: boolean;
   initiatingProject: string | null;
-}) {
+}): Promise<{ [id: string]: TaskStatus }> {
   setEnvVarsBasedOnArgs(nxArgs, loadDotEnvFiles);
 
   const { tasksRunner, runnerOptions } = getRunner(nxArgs, nxJson);
@@ -427,7 +454,9 @@ export async function invokeTasksRunner({
     nxJson
   );
 
-  const promiseOrObservable = tasksRunner(
+  let promiseOrObservable:
+    | Observable<{ task: Task; success: boolean }>
+    | Promise<{ [id: string]: TaskStatus }> = tasksRunner(
     tasks,
     {
       ...runnerOptions,
@@ -496,14 +525,13 @@ export async function invokeTasksRunner({
       daemon: daemonClient,
     }
   );
-  let anyFailures;
   if ((promiseOrObservable as any).subscribe) {
-    anyFailures = await anyFailuresInObservable(promiseOrObservable);
-  } else {
-    // simply await the promise
-    anyFailures = await anyFailuresInPromise(promiseOrObservable as any);
+    promiseOrObservable = convertObservableToPromise(
+      promiseOrObservable as Observable<{ task: Task; success: boolean }>
+    );
   }
-  return anyFailures ? 1 : 0;
+
+  return promiseOrObservable as Promise<{ [id: string]: TaskStatus }>;
 }
 
 function constructLifeCycles(lifeCycle: LifeCycle) {
@@ -524,55 +552,26 @@ function constructLifeCycles(lifeCycle: LifeCycle) {
   return lifeCycles;
 }
 
-function mergeTargetDependencies(
-  defaults: TargetDefaults | undefined | null,
-  deps: TargetDependencies
-): TargetDependencies {
-  const res = {};
-  Object.keys(defaults ?? {}).forEach((k) => {
-    res[k] = defaults[k].dependsOn;
-  });
-  if (deps) {
-    Object.keys(deps).forEach((k) => {
-      if (res[k]) {
-        res[k] = [...res[k], deps[k]];
-      } else {
-        res[k] = deps[k];
-      }
-    });
-
-    return res;
-  }
-}
-
-async function anyFailuresInPromise(
-  promise: Promise<{ [id: string]: TaskStatus }>
-) {
-  return Object.values(await promise).some(
-    (v) => v === 'failure' || v === 'skipped'
-  );
-}
-
-async function anyFailuresInObservable(obs: any) {
+async function convertObservableToPromise(
+  obs: Observable<{ task: Task; success: boolean }>
+): Promise<{ [id: string]: TaskStatus }> {
   return await new Promise((res) => {
-    let anyFailures = false;
-    obs.subscribe(
-      (t) => {
-        if (!t.success) {
-          anyFailures = true;
-        }
+    let tasksResults: { [id: string]: TaskStatus } = {};
+    obs.subscribe({
+      next: (t) => {
+        tasksResults[t.task.id] = t.success ? 'success' : 'failure';
       },
-      (error) => {
+      error: (error) => {
         output.error({
           title: 'Unhandled error in task executor',
         });
         console.error(error);
-        res(true);
+        res(tasksResults);
       },
-      () => {
-        res(anyFailures);
-      }
-    );
+      complete: () => {
+        res(tasksResults);
+      },
+    });
   });
 }
 
@@ -595,7 +594,7 @@ function shouldUseDynamicLifeCycle(
   return !tasks.find((t) => shouldStreamOutput(t, null));
 }
 
-function loadTasksRunner(modulePath: string) {
+function loadTasksRunner(modulePath: string): TasksRunner {
   try {
     const maybeTasksRunner = require(modulePath) as
       | TasksRunner
