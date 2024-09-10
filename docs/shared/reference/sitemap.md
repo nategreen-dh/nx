@@ -556,6 +556,7 @@
       - [connect-to-nx-cloud](/nx-api/nx/documents/connect-to-nx-cloud)
       - [reset](/nx-api/nx/documents/reset)
       - [repair](/nx-api/nx/documents/repair)
+      - [import](/nx-api/nx/documents/import)
       - [exec](/nx-api/nx/documents/exec)
       - [watch](/nx-api/nx/documents/watch)
       - [show](/nx-api/nx/documents/show)

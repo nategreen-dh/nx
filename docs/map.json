@@ -2096,6 +2096,11 @@
               "file": "generated/cli/repair"
             },
             {
+              "name": "import",
+              "id": "import",
+              "file": "generated/cli/import"
+            },
+            {
               "name": "exec",
               "id": "exec",
               "file": "generated/cli/exec"
