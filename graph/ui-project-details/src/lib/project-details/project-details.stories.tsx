@@ -93,14 +93,6 @@ export const Primary = {
             options: { command: 'node ./scripts/copy-readme.js jest' },
             configurations: {},
           },
-          'add-extra-dependencies': {
-            executor: 'nx:run-commands',
-            options: {
-              command:
-                'node ./scripts/add-dependency-to-build.js jest @nrwl/jest',
-            },
-            configurations: {},
-          },
           lint: {
             dependsOn: ['build-native', '^build-native'],
             inputs: [
@@ -194,14 +186,6 @@ export const Primary = {
         'nx-core-build-project-json-nodes',
       ],
       'targets.build.options.command': [
-        'packages/jest/project.json',
-        'nx-core-build-project-json-nodes',
-      ],
-      'targets.add-extra-dependencies': [
-        'packages/jest/project.json',
-        'nx-core-build-project-json-nodes',
-      ],
-      'targets.add-extra-dependencies.command': [
         'packages/jest/project.json',
         'nx-core-build-project-json-nodes',
       ],
@@ -605,14 +589,6 @@ export const Gradle = {
         'packages/jest/project.json',
         'nx-core-build-project-json-nodes',
       ],
-      'targets.add-extra-dependencies': [
-        'packages/jest/project.json',
-        'nx-core-build-project-json-nodes',
-      ],
-      'targets.add-extra-dependencies.command': [
-        'packages/jest/project.json',
-        'nx-core-build-project-json-nodes',
-      ],
       'targets.lint': [
         'packages/jest/project.json',
         'nx-core-build-project-json-nodes',
@@ -817,14 +793,6 @@ export const Cart = {
         'nx-core-build-project-json-nodes',
       ],
       'targets.build.options.command': [
-        'packages/jest/project.json',
-        'nx-core-build-project-json-nodes',
-      ],
-      'targets.add-extra-dependencies': [
-        'packages/jest/project.json',
-        'nx-core-build-project-json-nodes',
-      ],
-      'targets.add-extra-dependencies.command': [
         'packages/jest/project.json',
         'nx-core-build-project-json-nodes',
       ],
